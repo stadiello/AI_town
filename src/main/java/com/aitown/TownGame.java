@@ -62,13 +62,6 @@ public final class TownGame extends ApplicationAdapter {
             float mx = Gdx.input.getX(), my = Gdx.graphics.getHeight() - Gdx.input.getY();
             float min = 28 * zoom;
             selected = -1;
-            // Physical library: distinctive building anchored on traversable world tile.
-        Vector2 library = iso(world.libraryX, world.libraryY);
-        float bx = library.x, by = library.y;
-        shapes.setColor(.66f * light, .43f * light, .25f * light, 1);
-        shapes.rect(bx - 11 * zoom, by + 5 * zoom, 22 * zoom, 22 * zoom);
-        shapes.setColor(.38f * light, .19f * light, .13f * light, 1);
-        shapes.triangle(bx - 16 * zoom, by + 27 * zoom, bx + 16 * zoom, by + 27 * zoom, bx, by + 41 * zoom);
         for (World.Agent a : world.agents) {
                 Vector2 p = iso(a.x, a.y);
                 float dist = Vector2.dst(mx, my, p.x, p.y + TH * zoom / 2);
@@ -104,6 +97,13 @@ public final class TownGame extends ApplicationAdapter {
                 }
             }
         }
+        // Render the physical library only during the active ShapeRenderer batch.
+        Vector2 library = iso(world.libraryX, world.libraryY);
+        float bx = library.x, by = library.y;
+        shapes.setColor(.66f * light, .43f * light, .25f * light, 1);
+        shapes.rect(bx - 11 * zoom, by + 5 * zoom, 22 * zoom, 22 * zoom);
+        shapes.setColor(.38f * light, .19f * light, .13f * light, 1);
+        shapes.triangle(bx - 16 * zoom, by + 27 * zoom, bx + 16 * zoom, by + 27 * zoom, bx, by + 41 * zoom);
         for (World.Agent a : world.agents) {
             Vector2 p = iso(a.x, a.y);
             float x = p.x, y = p.y + TH * zoom / 2;
