@@ -1,61 +1,28 @@
-# AI Town
+# AI Town — Java / LibGDX
 
-A persistent, observable isometric world for autonomous agents.
+Persistent isometric simulation for autonomous agents. This implementation uses **Java 17 + LibGDX** instead of Python/Pygame.
 
-## MVP (v0.1)
+## Start
 
-- Procedural isometric 2D map rendered with **pygame-ce** (no external artwork required).
-- Day/night cycle, camera pan and zoom, clickable agents, pause and time acceleration.
-- Agents with hunger, fatigue, health and autonomous rule-based survival decisions.
-- Death and replacement without erasing history.
-- Append-only JSONL event log and SQLite library of agent journals.
-- Deterministic simulation with a configurable random seed. The renderer is independent of world rules.
-
-**This first version uses rule-based agents, not LLM inference.** The action-selection interface is designed to be replaced by a model later. Logs capture observations, structured decisions, actions and outcomes, not hidden model chain-of-thought.
-
-## Run
-
-Requires Python 3.11+.
+Prerequisites: JDK 17+, Gradle installed.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install -r requirements.txt
-python -m ai_town
-```
-
-Run headless (no graphics):
-
-```bash
-python -m ai_town --headless --ticks 2000 --seed 42
-```
-
-Run tests:
-
-```bash
-python -m unittest discover -s tests -v
+gradle run
+gradle test
+gradle run --args="--headless --ticks 2000 --seed 42"
 ```
 
 ## Controls
 
-| Key | Action |
-| --- | --- |
-| WASD or arrow keys | Move camera |
-| Mouse wheel | Zoom |
-| Left click | Select agent |
-| Space | Pause/resume |
-| 1 / 2 / 3 / 4 | Speed x1 / x2 / x5 / x10 |
-| Esc | Quit |
+WASD/arrows pan · +/- zoom · click an agent · Space pause · keys 1–4 simulation speed.
 
-World events: `data/events.jsonl`. Agent-written journal entries: `data/library.sqlite3`. Both paths can be changed with `--data-dir`. Each launch creates a new world session with a unique ID, without deleting previous logs.
+## Architecture
 
-## Structure
+- `sim/World.java`: seeded, renderer-independent survival simulation.
+- `sim/Archive.java`: durable JSONL events and persistent shared written library.
+- `TownGame.java`: 2D isometric GPU renderer with day/night tint and agent inspection.
+- `Main.java`: desktop/headless startup.
 
-- `ai_town/world.py`: deterministic domain simulation and agent policy.
-- `ai_town/storage.py`: append-only event store and persisted shared library.
-- `ai_town/view.py`: isometric pygame renderer.
-- `ai_town/__main__.py`: CLI entrypoint.
+The first release has **heuristic agents**, not LLMs. Logs record structured decisions, not hidden internal chain-of-thought. Procedural geometric tiles are placeholders for a future pixel-art texture atlas. World snapshots, books as in-world objects, LLM decisions, and interactions remain future work.
 
-## Next steps
-
-Introduce LLM policy (Ollama structured output), agent conversations, readable books inside a physical library, richer map assets, persistence/snapshot restore, and richer crafting and resource rules. Avoid relying on rendering FPS as simulation time.
+No Gradle wrapper included yet; the build and tests have **not been executed** in this environment.
