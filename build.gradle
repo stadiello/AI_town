@@ -22,3 +22,10 @@ tasks.named('run', JavaExec) {
     }
 }
 tasks.withType(Test).configureEach { useJUnitPlatform() }
+
+tasks.register('observatory', JavaExec) {
+    group = 'application'
+    description = 'Launch local AI Observatory on http://localhost:8765'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.aitown.observatory.Observatory'
+}
