@@ -166,6 +166,19 @@ public final class TownGame extends ApplicationAdapter {
             else if (cell.forest) shapes.setColor((.20f + texture) * light, .48f * light, .36f * light, 1);
             else shapes.setColor((.32f + texture) * light, .62f * light, .48f * light, 1);
             diamond(p.x, p.y, w + .6f, h + .6f);
+        }
+    }
+
+    /** Elevated scenery is drawn after the entire terrain pass, in diagonal depth order. */
+    private void drawDecorations(float light) {
+        for (int depth = 0; depth <= 2 * (world.size - 1); depth++) {
+            for (int x = 0; x < world.size; x++) {
+                int y = depth - x;
+                if (y < 0 || y >= world.size) continue;
+                World.Cell cell = world.cells[y][x];
+                Vector2 p = iso(x, y);
+                float w = TILE_W * zoom, h = TILE_H * zoom;
+                if (p.x < -w || p.x > screenW + w || p.y < -h || p.y > screenH + h) continue;
             if (cell.water) {
                 shapes.setColor(.62f * light, .84f * light, .84f * light, .25f);
                 shapes.rectLine(p.x - w * .19f, p.y + h * .48f, p.x + w * .10f, p.y + h * .48f, 1.1f);
@@ -181,6 +194,7 @@ public final class TownGame extends ApplicationAdapter {
             } else if (cell.food > 0) {
                 shapes.setColor(.96f, .70f, .40f, 1);
                 shapes.circle(p.x, p.y + h * .58f, Math.max(2, 2.6f * zoom), 10);
+            }
             }
         }
         Vector2 p = iso(world.libraryX, world.libraryY);
@@ -315,6 +329,7 @@ public final class TownGame extends ApplicationAdapter {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         drawWorld(daylight);
+        drawDecorations(daylight);
         drawAgents();
         drawPanels();
         shapes.end();
