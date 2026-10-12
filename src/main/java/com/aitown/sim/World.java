@@ -2,6 +2,8 @@ package com.aitown.sim;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.concurrent.CompletableFuture;
+import java.io.IOException;
 
 /** Pure, deterministic game state. One step = ten simulated minutes. */
 public final class World {
@@ -24,6 +26,11 @@ public final class World {
     public final Cell[][] cells;
     public final List<Agent> agents = new ArrayList<>();
     public int minutes = 0;
+    public final int libraryX, libraryY;
+    private Archive archive;
+    private OllamaPolicy policy;
+    private final Map<Integer, CompletableFuture<OllamaPolicy.Decision>> pending = new HashMap<>();
+    private final Map<Integer, OllamaPolicy.Decision> ready = new HashMap<>();
     private int nextId = 1;
     private final Random random;
     private final Consumer<String> events;
@@ -41,9 +48,20 @@ public final class World {
                 cells[y][x] = new Cell(river, forest, forest ? 1 + random.nextInt(5) :
                         (!river && roll > .88 ? 1 : 0));
             }
+        int lx = -1, ly = -1;
+        outer: for (int y = 0; y < size; y++) for (int x = 0; x < size; x++)
+            if (!cells[y][x].water && Math.abs(x - size / 2) + Math.abs(y - size / 2) < size / 3) {
+                lx = x; ly = y; break outer;
+            }
+        if (lx < 0) { for (int y = 0; y < size && lx < 0; y++) for (int x = 0; x < size; x++)
+            if (!cells[y][x].water) { lx = x; ly = y; break; } }
+        libraryX = lx; libraryY = ly;
+        cells[ly][lx].food = 0;
         for (int i = 0; i < population; i++) spawn();
     }
 
+    public void connect(Archive archive, OllamaPolicy policy) { this.archive = archive; this.policy = policy; }
+    public boolean atLibrary(Agent a) { return a.x == libraryX && a.y == libraryY; }
     public int day() { return minutes / 1440 + 1; }
     public double hour() { return (minutes % 1440) / 60.0; }
     private void emit(String type, Agent agent, String payload) {
@@ -72,6 +90,8 @@ public final class World {
             if (a.health <= 0) {
                 emit("death", a, "{\"cause\":\"unmet_needs\",\"age_minutes\":" + a.ageMinutes + "}");
                 agents.remove(a);
+                pending.remove(a.id);
+                ready.remove(a.id);
                 spawn();
                 continue;
             }
@@ -84,22 +104,88 @@ public final class World {
             emit("new_day", null, "{}");
         }
     }
+    private static String escape(String text) {
+        return text.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r");
+    }
+    private void move(Agent a) {
+        int[][] shifts = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        List<int[]> possible = new ArrayList<>();
+        for (int[] shift : shifts) {
+            int x = a.x + shift[0], y = a.y + shift[1];
+            if (x >= 0 && y >= 0 && x < size && y < size && !cells[y][x].water)
+                possible.add(new int[]{x, y});
+        }
+        if (!possible.isEmpty()) {
+            int[] dest = possible.get(random.nextInt(possible.size()));
+            a.x = dest[0]; a.y = dest[1];
+            a.fatigue = Math.min(100, a.fatigue + 1);
+        }
+    }
     private void decide(Agent a) {
         Cell cell = cells[a.y][a.x];
+        // Completed inference is applied only on a future simulation tick.
+        CompletableFuture<OllamaPolicy.Decision> future = pending.get(a.id);
+        if (future != null && future.isDone()) {
+            pending.remove(a.id);
+            try { OllamaPolicy.Decision d = future.getNow(null);
+                if (d != null) ready.put(a.id, d);
+            } catch (Exception ignored) { }
+        }
+        if (policy != null && !pending.containsKey(a.id) && minutes % 60 == 0) {
+            String context = "{\"id\":" + a.id + ",\"x\":" + a.x + ",\"y\":" + a.y +
+                ",\"hunger\":" + a.hunger + ",\"fatigue\":" + a.fatigue +
+                ",\"inventory\":" + a.inventory + ",\"foodHere\":" + cell.food +
+                ",\"atLibrary\":" + atLibrary(a) + "}";
+            pending.put(a.id, policy.request(context));
+        }
         String observation = "{\"x\":" + a.x + ",\"y\":" + a.y +
                 ",\"hunger\":" + a.hunger + ",\"fatigue\":" + a.fatigue +
                 ",\"food\":" + cell.food + ",\"inventory\":" + a.inventory + "}";
-        if (a.hunger > 35 && a.inventory > 0) {
+        OllamaPolicy.Decision instruction = ready.remove(a.id);
+        String proposed = instruction == null ? "" : instruction.action().toLowerCase(Locale.ROOT);
+        boolean applied = false;
+        if ("read".equals(proposed) && atLibrary(a) && archive != null) {
+            try {
+                List<String> books = archive.read("");
+                String selected = books.isEmpty() ? "empty" : books.get(0);
+                emit("library_read", a, "{\"excerpt\":\"" + escape(selected.substring(0, Math.min(180, selected.length()))) + "\"}");
+                a.action = "read"; a.reason = "consult library"; applied = true;
+            } catch (IOException ignored) { }
+        } else if ("write".equals(proposed) && atLibrary(a) && archive != null) {
+            try {
+                String message = instruction.message();
+                if (!message.isBlank()) {
+                    archive.write(minutes, a.id, "Journal of agent " + a.id, message);
+                    a.action = "write"; a.reason = "record experience"; applied = true;
+                }
+            } catch (IOException ignored) { }
+        } else if ("talk".equals(proposed)) {
+            for (Agent other : agents) {
+                if (other.id != a.id && Math.abs(other.x - a.x) + Math.abs(other.y - a.y) <= 1) {
+                    String message = instruction.message();
+                    emit("conversation", a, "{\"to_agent_id\":" + other.id + ",\"message\":\"" +
+                        escape(message) + "\"}");
+                    a.action = "talk"; a.reason = "communicate with nearby agent"; applied = true;
+                    break;
+                }
+            }
+        } else if ("move".equals(proposed)) {
+            move(a); a.action = "move"; a.reason = instruction.reason(); applied = true;
+        } else if ("wait".equals(proposed)) {
+            a.action = "wait"; a.reason = instruction.reason(); applied = true;
+        }
+        if (!applied && a.hunger > 35 && a.inventory > 0) {
             a.action = "eat"; a.reason = "hungry and carrying food";
             a.inventory--; a.hunger = Math.max(0, a.hunger - 45);
-        } else if (a.fatigue > 65) {
+        } else if (!applied && a.fatigue > 65) {
             a.action = "sleep"; a.reason = "fatigue threshold";
             a.fatigue = Math.max(0, a.fatigue - 45);
             a.hunger = Math.min(100, a.hunger + 4);
-        } else if (cell.food > 0) {
+        } else if (!applied && cell.food > 0) {
             a.action = "harvest"; a.reason = "food available";
             a.inventory++; cell.food--;
-        } else {
+        } else if (!applied) {
             int[][] shifts = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
             List<int[]> possible = new ArrayList<>();
             for (int[] shift : shifts) {

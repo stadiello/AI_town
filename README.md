@@ -42,3 +42,21 @@ Events are stored both in `data/events.jsonl` (append-only export) and `data/obs
 **Access boundary:** the observatory reads the observer-only event table. The agent-facing `Archive.read(query)` method reads only explicitly published `writings` from SQLite. Agents cannot read private events through that method.
 
 Current scope: schema version 1, session-scoped event IDs, timestamps in simulation ticks; `caused_by` is currently always an empty array. No genuine causal provenance, LLM integration, historical migration of old JSONL files, world replay or snapshots yet. The server binds to loopback and is intentionally unauthenticated: do not expose it to the public internet.
+
+
+## Experimental Ollama agents, conversations, and physical library
+
+Start a local Ollama server and download a model compatible with your machine:
+
+```bash
+ollama pull qwen3:8b
+ollama serve
+# In a separate terminal:
+gradle run --args="--llm --model qwen3:8b"
+```
+
+Alternative fast headless run: `gradle run --args="--headless --ticks 2000 --llm --model qwen3:8b"`. Endpoint override: `--ollama-url http://127.0.0.1:11434`.
+
+The physical library is drawn as a brown-roofed building on the isometric map. Agents can READ or WRITE only while standing **on its tile**. Nearby TALK actions create indexed `conversation` observer events; book content goes into the shared writings table, never into the agents' private observer logs. LLM requests run on a capped background pool with six-second deadlines; unavailable Ollama uses heuristic fallbacks, so the renderer doesn't block.
+
+**Prototype limitations:** navigation currently uses random walking and does not yet intentionally route agents toward the library. The LLM may choose valid actions but is not yet guaranteed to do so; read/write/talk occur only when valid spatial conditions are met. A conversation is a single utterance, not a two-way thread yet. LLM outputs are not reproducible across simulation runs. There are no LLM credentials in the repository. Structured reason summaries are logged, not hidden model chain-of-thought.

@@ -14,6 +14,7 @@ import java.util.*;
 public final class TownGame extends ApplicationAdapter {
     private final World world;
     private final Archive archive;
+    private final OllamaPolicy policy;
     private ShapeRenderer shapes;
     private SpriteBatch batch;
     private BitmapFont font;
@@ -23,9 +24,10 @@ public final class TownGame extends ApplicationAdapter {
     private static final float TW = 48, TH = 24;
     private final Vector2 point = new Vector2();
 
-    public TownGame(World world, Archive archive) {
+    public TownGame(World world, Archive archive, OllamaPolicy policy) {
         this.world = world;
         this.archive = archive;
+        this.policy = policy;
     }
     @Override public void create() {
         shapes = new ShapeRenderer();
@@ -60,7 +62,14 @@ public final class TownGame extends ApplicationAdapter {
             float mx = Gdx.input.getX(), my = Gdx.graphics.getHeight() - Gdx.input.getY();
             float min = 28 * zoom;
             selected = -1;
-            for (World.Agent a : world.agents) {
+            // Physical library: distinctive building anchored on traversable world tile.
+        Vector2 library = iso(world.libraryX, world.libraryY);
+        float bx = library.x, by = library.y;
+        shapes.setColor(.66f * light, .43f * light, .25f * light, 1);
+        shapes.rect(bx - 11 * zoom, by + 5 * zoom, 22 * zoom, 22 * zoom);
+        shapes.setColor(.38f * light, .19f * light, .13f * light, 1);
+        shapes.triangle(bx - 16 * zoom, by + 27 * zoom, bx + 16 * zoom, by + 27 * zoom, bx, by + 41 * zoom);
+        for (World.Agent a : world.agents) {
                 Vector2 p = iso(a.x, a.y);
                 float dist = Vector2.dst(mx, my, p.x, p.y + TH * zoom / 2);
                 if (dist < min) { min = dist; selected = a.id; }
@@ -133,6 +142,7 @@ public final class TownGame extends ApplicationAdapter {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        if (policy != null) policy.close();
         try { archive.close(); } catch (IOException e) { Gdx.app.error("Archive", "Cannot close archive", e); }
     }
 }
