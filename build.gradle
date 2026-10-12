@@ -13,4 +13,11 @@ dependencies {
 }
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 application { mainClass = 'com.aitown.Main' }
+tasks.named('run', JavaExec) {
+    // GLFW/Cocoa must initialize on the process's first thread on macOS.
+    // JavaExec starts the application in a separate JVM, so this flag goes here.
+    if (System.getProperty('os.name').toLowerCase(java.util.Locale.ROOT).contains('mac')) {
+        jvmArgs '-XstartOnFirstThread'
+    }
+}
 tasks.withType(Test).configureEach { useJUnitPlatform() }
